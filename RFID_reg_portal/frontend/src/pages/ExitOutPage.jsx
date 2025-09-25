@@ -16,7 +16,7 @@ export default function ExitOutPage() {
   // Fetch stack data
   const fetchStack = async () => {
     try {
-      const response = await api('/exitout/stack');
+      const response = await api('/api/exitout/stack');
       if (response.success) {
         setStack(response.stack || []);
         setStats(response.stats || { totalTeams: 0, totalCards: 0 });
@@ -37,7 +37,7 @@ export default function ExitOutPage() {
     setReleasing(prev => new Set([...prev, registrationId]));
     
     try {
-      const response = await api(`/exitout/release/${registrationId}`, { method: 'POST' });
+      const response = await api(`/api/exitout/release/${registrationId}`, { method: 'POST' });
       
       if (response.success) {
         showToast(
@@ -70,7 +70,7 @@ export default function ExitOutPage() {
     
     setLoading(true);
     try {
-      const response = await api('/exitout/clear', { method: 'POST' });
+      const response = await api('/api/exitout/clear', { method: 'POST' });
       
       if (response.success) {
         showToast('Stack cleared successfully', 'success');
