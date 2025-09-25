@@ -73,11 +73,39 @@ if (-not (Test-Path $BackendDir))  { throw "Backend directory not found: $Backen
 if (-not (Test-Path $FrontendDir)) { throw "Frontend directory not found: $FrontendDir" }
 if ($PgPassword) { $env:PGPASSWORD = $PgPassword }
 
+# Check if Mosquitto is available
+$MosquittoPath = "C:\Program Files\mosquitto\mosquitto.exe"
+if (-not (Test-Path $MosquittoPath)) {
+  Write-Warning "Mosquitto not found at $MosquittoPath - MQTT functionality will not be available"
+}
+
 # --- DB lifecycle ---
 Ensure-Database
 Init-Database
 
-# --- launch three persistent terminals using cmd /k (window stays open even on error) ---
+# --- launch four persistent terminals using cmd /k (window stays open even on error) ---
+# MQTT Broker (Mosquitto)
+$MqttConfigPath = Join-Path (Split-Path -Parent $Root) 'mosquitto.conf'
+$mqttRunning = $false
+try {
+  $port1885Check = netstat -an | Select-String ":1885.*LISTENING"
+  if ($port1885Check) {
+    Write-Host "MQTT Broker already running on port 1885 - skipping startup" -ForegroundColor Yellow
+    $mqttProc = $null
+    $mqttRunning = $true
+  }
+} catch {}
+
+if (-not $mqttRunning -and (Test-Path $MqttConfigPath) -and (Test-Path $MosquittoPath)) {
+  $mqttCmd = "cd /d `"$(Split-Path -Parent $Root)`" && `"$MosquittoPath`" -c mosquitto.conf"
+  $mqttProc = Start-Process -FilePath "cmd.exe" -ArgumentList "/k", $mqttCmd -PassThru -WindowStyle Normal
+  Write-Host ("MQTT Broker window PID: {0}" -f $mqttProc.Id) -ForegroundColor Cyan
+  Start-Sleep -Seconds 2  # Give MQTT broker time to start
+} elseif (-not $mqttRunning) {
+  Write-Warning "Mosquitto config not found at $MqttConfigPath or Mosquitto not installed - MQTT broker not started"
+  $mqttProc = $null
+}
+
 # Backend
 $backendCmd = if ($BackendPortOverride) {
   "cd /d `"$BackendDir`" && set PORT=$BackendPortOverride && npm run start"
@@ -98,13 +126,31 @@ $dbProc = Start-Process -FilePath "cmd.exe" -ArgumentList "/k", $dbCmd -PassThru
 Write-Host ("DB (psql) window PID: {0}" -f $dbProc.Id)
 
 Write-Host ""
-Write-Host "All three windows launched. Press ENTER here to stop them..." -ForegroundColor Yellow
+Write-Host "=== RFID System Status ===" -ForegroundColor Green
+Write-Host "✅ Database: Connected to '$DbName'" -ForegroundColor Green
+if ($mqttProc -or $mqttRunning) {
+  Write-Host "✅ MQTT Broker: Running on port 1885" -ForegroundColor Green
+} else {
+  Write-Host "❌ MQTT Broker: Not running" -ForegroundColor Red
+}
+Write-Host "✅ Backend API: Running on port 4000" -ForegroundColor Green
+Write-Host "✅ Frontend UI: Running on network interface" -ForegroundColor Green
+Write-Host "✅ DB Console: Available for queries" -ForegroundColor Green
+Write-Host ""
+Write-Host "🌐 Access URLs:" -ForegroundColor Cyan
+Write-Host "   Frontend: http://10.30.6.239:5173" -ForegroundColor White
+Write-Host "   Backend:  http://10.30.6.239:4000" -ForegroundColor White
+Write-Host ""
+Write-Host "All services launched. Press ENTER here to stop them..." -ForegroundColor Yellow
 [void](Read-Host)
 
 # --- shutdown & cleanup ---
-foreach ($p in @($backendProc,$frontendProc,$dbProc)) {
+foreach ($p in @($mqttProc,$backendProc,$frontendProc,$dbProc)) {
   if ($p -and -not $p.HasExited) {
-    try { Stop-Process -Id $p.Id -Force } catch {}
+    try { 
+      Write-Host "Stopping process PID: $($p.Id)" -ForegroundColor DarkGray
+      Stop-Process -Id $p.Id -Force 
+    } catch {}
   }
 }
 

@@ -52,8 +52,12 @@ function getStack() {
     }
   }
   
-  // Sort by registration ID for consistent display
-  stackData.sort((a, b) => a.registrationId.localeCompare(b.registrationId));
+  // Sort by registration ID for consistent display (handle both string and number IDs)
+  stackData.sort((a, b) => {
+    const aId = String(a.registrationId);
+    const bId = String(b.registrationId);
+    return aId.localeCompare(bId);
+  });
   
   return stackData;
 }
@@ -65,7 +69,29 @@ function getStack() {
  * @returns {Object} Release operation result
  */
 async function releaseAll(registrationId) {
-  const teamStack = exitoutStack.get(registrationId);
+  // Handle both string and number registration IDs for backward compatibility
+  let teamStack = exitoutStack.get(registrationId);
+  let actualRegId = registrationId;
+  
+  if (!teamStack) {
+    // Try with number conversion in case it was stored as number
+    const numericId = Number(registrationId);
+    if (!isNaN(numericId)) {
+      teamStack = exitoutStack.get(numericId);
+      if (teamStack) {
+        actualRegId = numericId;
+      }
+    }
+  }
+  
+  if (!teamStack) {
+    // Try with string conversion in case it was stored as string
+    const stringId = String(registrationId);
+    teamStack = exitoutStack.get(stringId);
+    if (teamStack) {
+      actualRegId = stringId;
+    }
+  }
   
   if (!teamStack || teamStack.size === 0) {
     return {
@@ -107,8 +133,8 @@ async function releaseAll(registrationId) {
     
     await client.query('COMMIT');
     
-    // Clear the team's stack after successful release
-    exitoutStack.delete(registrationId);
+    // Clear the team's stack after successful release (use the actual key that was found)
+    exitoutStack.delete(actualRegId);
     
     const successCount = releaseResults.filter(r => r.status === 'released').length;
     const errorCount = releaseResults.filter(r => r.status === 'error').length;

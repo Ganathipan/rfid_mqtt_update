@@ -24,7 +24,7 @@ const char* serverBase = "http://10.30.9.163:4000";  // <-- change to your Node 
 
 // ===== MQTT Configuration =====
 const char* mqtt_server = "10.30.9.163";  // Your broker (PC/LAN IP)
-const int   mqtt_port   = 1883;
+const int   mqtt_port   = 1885;
 
 // ===== Reader Index (unique per device) =====
 const int rIndex = 1;   // <-- set a unique number per physical reader

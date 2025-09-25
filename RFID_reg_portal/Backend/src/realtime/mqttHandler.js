@@ -1,5 +1,6 @@
 const mqtt = require('mqtt');
 const pool = require('../db/pool');
+const exitoutStackService = require('../services/exitoutStackService');
 require('dotenv').config(); // Ensure environment variables are loaded
 
 // MQTT Configuration
@@ -32,7 +33,7 @@ client.on('message', async (topic, message) => {
   try {
     // Parse the JSON payload
     const payload = JSON.parse(message.toString());
-    const { portal, rfid_card_id, label } = payload;
+    const { portal, rfid_card_id, label, registration_id, tag } = payload;
     
     if (!portal || !rfid_card_id) {
       console.warn('[MQTT] Invalid payload - missing portal or rfid_card_id:', payload);
@@ -42,16 +43,59 @@ client.on('message', async (topic, message) => {
     // Use label from payload, fallback to DEFAULT_LABEL if not provided
     const finalLabel = label || DEFAULT_LABEL;
     
-    console.log(`[MQTT] Tap: {portal: "${portal}", rfid_card_id: "${rfid_card_id}", label: "${finalLabel}"}`);
+    console.log(`[MQTT] Tap: {portal: "${portal}", rfid_card_id: "${rfid_card_id}", tag: "${tag}", label: "${finalLabel}"}`);
     
-    // Insert into logs table
-    const query = `
-      INSERT INTO logs (log_time, rfid_card_id, portal, label)
-      VALUES (NOW(), $1, $2, $3)
-    `;
+    // Handle EXITOUT - check portal, tag, OR label for 'EXITOUT'
+    const isExitOut = (portal === 'EXITOUT') || (tag === 'EXITOUT') || (finalLabel === 'EXITOUT');
     
-    await pool.query(query, [rfid_card_id, portal, finalLabel]);
-    console.log(`[MQTT] ✅ Successfully logged RFID tap: ${rfid_card_id} at ${portal}`);
+    if (isExitOut) {
+      // Check if we have a registration_id in the payload or need to look it up
+      let regId = registration_id;
+      
+      if (!regId) {
+        // Look up registration_id from the RFID card
+        const lookupQuery = `
+          SELECT m.registration_id 
+          FROM members m 
+          JOIN rfid_cards rc ON m.rfid_card_id = rc.rfid_card_id 
+          WHERE rc.rfid_card_id = $1 
+          LIMIT 1
+        `;
+        const lookupResult = await pool.query(lookupQuery, [rfid_card_id]);
+        
+        if (lookupResult.rows.length > 0) {
+          regId = lookupResult.rows[0].registration_id;
+        } else {
+          console.warn(`[MQTT] EXITOUT: Could not find registration_id for card ${rfid_card_id}`);
+          // Still log it but without registration context
+          regId = 'UNKNOWN';
+        }
+      }
+      
+      // Add to exitout stack instead of processing immediately (ensure regId is string)
+      const regIdString = String(regId);
+      exitoutStackService.addToStack(regIdString, rfid_card_id);
+      const exitoutReason = finalLabel === 'EXITOUT' ? 'label=EXITOUT' : (tag === 'EXITOUT' ? 'tag=EXITOUT' : 'portal=EXITOUT');
+      console.log(`[MQTT] ✅ Stacked card ${rfid_card_id} for registration ${regIdString} (EXITOUT via ${exitoutReason})`);
+      
+      // Still log the tap for audit purposes
+      const logQuery = `
+        INSERT INTO logs (log_time, rfid_card_id, portal, label)
+        VALUES (NOW(), $1, $2, $3)
+      `;
+      await pool.query(logQuery, [rfid_card_id, portal, finalLabel]);
+      
+    } else {
+      // OLD: For non-EXITOUT portals, use the original logic
+      // Insert into logs table
+      const query = `
+        INSERT INTO logs (log_time, rfid_card_id, portal, label)
+        VALUES (NOW(), $1, $2, $3)
+      `;
+      
+      await pool.query(query, [rfid_card_id, portal, finalLabel]);
+      console.log(`[MQTT] ✅ Successfully logged RFID tap: ${rfid_card_id} at ${portal}`);
+    }
     
   } catch (error) {
     if (error instanceof SyntaxError) {
