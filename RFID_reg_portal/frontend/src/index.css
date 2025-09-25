@@ -1,0 +1,13 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-primary: #00b4eb;
+  --color-brand-dark: #0056a2;
+  --color-brand-accent: #50b748;
+  --color-brand-ink: #0b1220;
+  --color-brand-surface: #0e1526;
+  --color-brand-card: #121a2d;
+}
+
+html, body, #root { height: 100%; }
+body { margin: 0; }
