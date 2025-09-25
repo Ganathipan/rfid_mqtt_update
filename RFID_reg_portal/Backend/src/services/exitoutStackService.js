@@ -7,6 +7,7 @@
  */
 
 const pool = require('../db/pool');
+const { decCrowd } = require('./venueState');
 
 // In-memory stack: Map<registrationId, Set<tagId>>
 const exitoutStack = new Map();
@@ -140,6 +141,21 @@ async function releaseAll(registrationId) {
     const errorCount = releaseResults.filter(r => r.status === 'error').length;
     
     console.log(`[ExitOut Stack] Released ${successCount} cards successfully, ${errorCount} errors for team ${registrationId}`);
+    
+    // Reduce venue current_crowd count by the number of cards successfully released
+    console.log(`[ExitOut Stack] About to reduce venue count. SuccessCount: ${successCount}`);
+    if (successCount > 0) {
+      try {
+        console.log(`[ExitOut Stack] Calling decCrowd(${successCount})...`);
+        const newCrowdCount = await decCrowd(successCount);
+        console.log(`[ExitOut Stack] Reduced venue crowd by ${successCount}, new total: ${newCrowdCount}`);
+      } catch (venueError) {
+        console.error(`[ExitOut Stack] Error updating venue crowd count:`, venueError);
+        // Don't fail the release operation due to venue count error
+      }
+    } else {
+      console.log(`[ExitOut Stack] No successful releases, not reducing venue count`);
+    }
     
     return {
       registrationId,

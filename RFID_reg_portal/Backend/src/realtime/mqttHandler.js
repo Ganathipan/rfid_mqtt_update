@@ -4,7 +4,7 @@ const exitoutStackService = require('../services/exitoutStackService');
 require('dotenv').config(); // Ensure environment variables are loaded
 
 // MQTT Configuration
-const MQTT_URL = process.env.MQTT_URL || 'mqtt://localhost:1883';
+const MQTT_URL = process.env.MQTT_URL || 'mqtt://localhost:1885';
 const MQTT_TOPIC = 'rfid/#';
 const DEFAULT_LABEL = 'CLUSTER1';
 
@@ -43,10 +43,10 @@ client.on('message', async (topic, message) => {
     // Use label from payload, fallback to DEFAULT_LABEL if not provided
     const finalLabel = label || DEFAULT_LABEL;
     
-    console.log(`[MQTT] Tap: {portal: "${portal}", rfid_card_id: "${rfid_card_id}", tag: "${tag}", label: "${finalLabel}"}`);
+    console.log(`[MQTT] Tap: {portal: "${portal}", rfid_card_id: "${rfid_card_id}", label: "${finalLabel}"}`);
     
     // Handle EXITOUT - check portal, tag, OR label for 'EXITOUT'
-    const isExitOut = (portal === 'EXITOUT') || (tag === 'EXITOUT') || (finalLabel === 'EXITOUT');
+    const isExitOut = (portal === 'EXITOUT') || (finalLabel === 'EXITOUT');
     
     if (isExitOut) {
       // Check if we have a registration_id in the payload or need to look it up

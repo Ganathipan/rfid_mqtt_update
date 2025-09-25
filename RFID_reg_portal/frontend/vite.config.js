@@ -5,15 +5,16 @@ import react from '@vitejs/plugin-react'
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   // Use environment variables for backend connection
-  const host = env.VITE_BACKEND_HOST || '10.30.6.239'
-  const port = env.VITE_BACKEND_PORT || '4000'
+  const backendHost = env.VITE_BACKEND_HOST || 'localhost'
+  const backendPort = env.VITE_BACKEND_PORT || '4000'
+  
   return {
     plugins: [react()],
     server: {
-      host: '10.30.6.239',
-      // Let Vite find an available port
+      host: true, // Allow access from network (0.0.0.0)
+      port: 5173,
       proxy: {
-        '/api': `http://${host}:${port}`,
+        '/api': `http://${backendHost}:${backendPort}`,
       },
     },
   }
